@@ -1,0 +1,29 @@
+{
+  "name": "blender-link",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri dev",
+    "tb": "tauri build"
+  },
+  "dependencies": {
+    "@primevue/themes": "^4.1.1",
+    "@tauri-apps/api": "^2.0.3",
+    "@tauri-apps/plugin-fs": "^2.0.1",
+    "@tauri-apps/plugin-shell": "^2",
+    "primevue": "^4.1.1",
+    "vue": "^3.3.4"
+  },
+  "devDependencies": {
+    "@primevue/auto-import-resolver": "^4.1.1",
+    "@tauri-apps/cli": "^2",
+    "@vitejs/plugin-vue": "^5.0.5",
+    "unplugin-vue-components": "^0.27.4",
+    "vite": "^5.3.1",
+    "vite-plugin-env-compatible": "^2.0.1"
+  }
+}

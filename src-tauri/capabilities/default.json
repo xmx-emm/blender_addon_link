@@ -1,0 +1,36 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "core:window:deny-start-dragging",
+    "fs:default",
+    "fs:read-all",
+    "fs:read-files",
+    "fs:read-meta",
+    "fs:allow-remove",
+    "shell:allow-execute",
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        {
+          "path": "$APPDATA/*"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "*"
+        },
+        {
+          "path": "**"
+        }
+      ]
+    }
+  ]
+}
