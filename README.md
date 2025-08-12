@@ -1,5 +1,8 @@
 [![](https://i1.hdslb.com/bfs/archive/4ddb37a9a11f4132c8bfcf5e2f196d12af1e5068.jpg)](https://player.bilibili.com/player.html?isOutside=true&aid=113457567369631&bvid=BV1NAmBYGEAQ&cid=26697139989&p=1)
 
+https://www.bilibili.com/video/BV1NAmBYGEAQ
+链接Blender插件
+
 # Tauri + Vue 3
 
 This template should help get you started developing with Tauri + Vue 3 in Vite. The template uses Vue 3
