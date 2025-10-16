@@ -1,12 +1,7 @@
 <script setup>
 
 import {onBeforeMount, ref} from "vue";
-import {
-  appDataDir, BaseDirectory,
-  basename,
-  dirname,
-  join
-} from "@tauri-apps/api/path";
+import {appDataDir, BaseDirectory, basename, dirname, join} from "@tauri-apps/api/path";
 import {exists, remove} from "@tauri-apps/plugin-fs";
 import {invoke} from "@tauri-apps/api/core";
 
@@ -19,7 +14,7 @@ const props = defineProps({
 })
 
 
-const linkAddonVersion = ['4.0', '4.1', '4.2', '4.3', '4.4', '4.5']
+const linkAddonVersion = ['4.0', '4.1', '4.2', '4.3', '4.4', '4.5', '5.0', '5.1']
 const addonInfo = ref({
   name: 'unknown',
   linkVersion: []
