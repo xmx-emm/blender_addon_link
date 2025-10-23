@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 
 import {onBeforeMount, ref} from "vue";
 import {BaseDirectory, basename, join} from "@tauri-apps/api/path";

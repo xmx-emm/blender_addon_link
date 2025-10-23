@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 // 拖入文件夹设置文件夹
 // 读取那些Blender版本被Link了的,或者是已经有了的
 // 功能:

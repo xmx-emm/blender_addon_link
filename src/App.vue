@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import BlenderLink from "./BlenderLink.vue";
 </script>
 
