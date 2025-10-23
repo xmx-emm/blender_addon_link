@@ -1,7 +1,7 @@
 <script setup>
 
 import {onBeforeMount, ref} from "vue";
-import {appDataDir, BaseDirectory, basename, dirname, join} from "@tauri-apps/api/path";
+import {BaseDirectory, basename, join} from "@tauri-apps/api/path";
 import {exists, remove} from "@tauri-apps/plugin-fs";
 import {invoke} from "@tauri-apps/api/core";
 
@@ -19,37 +19,6 @@ const addonInfo = ref({
   name: 'unknown',
   linkVersion: []
 })
-
-function addonExtension(version) {
-  const vn = parseInt(version.replace(".", ""))
-  return vn > 41;
-}
-
-async function getAddonLinkFolder(version, isExtension) {
-  /**
-   * 通过版本获取插件文件夹路径
-   * 4.1没有扩展文件夹,4.2 >= 才有扩展
-   * blender版本目前只有两位数 2024-10-28
-   * C:\Users\Name\AppData\Roaming\Blender Foundation\Blender\4.4\extensions\user_default
-   * C:\Users\Name\AppData\Roaming\Blender Foundation\Blender\4.4\script\addons
-   */
-  const extension = addonExtension(version)
-  const pathJoin = [
-    await dirname(await dirname(await appDataDir())),
-    // 'AppData',
-    'Roaming',
-    'Blender Foundation',
-    'Blender',
-    version
-  ]
-
-  if (isExtension && extension) {
-    pathJoin.push('extensions', 'user_default')
-  } else {
-    pathJoin.push('scripts', 'addons')
-  }
-  return await join(...pathJoin)
-}
 
 function linkAddon(addon) {
   const args = {to: addon.installFolder, from: props.addonPath}

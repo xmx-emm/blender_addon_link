@@ -3,7 +3,8 @@ import BlenderLink from "./BlenderLink.vue";
 </script>
 
 <template>
-  <Toast />
+  <Toast/>
+  <BlenderVersion/>
   <BlenderLink/>
 </template>
 
