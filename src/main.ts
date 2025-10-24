@@ -3,6 +3,7 @@ import App from "./App.vue";
 
 import ToastService from 'primevue/toastservice';
 import PrimeVue from 'primevue/config';
+import Aura from '@primevue/themes/aura';
 
 let app = createApp(App);
 
@@ -14,7 +15,7 @@ pinia.use(piniaPluginPersistedState)
 
 
 app.use(pinia)
-app.use(PrimeVue, {});
+app.use(PrimeVue, {theme: {preset: Aura}});
 app.use(ToastService);
 
 app.mount("#app");
