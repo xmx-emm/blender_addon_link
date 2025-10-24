@@ -14,46 +14,6 @@ import {join} from "@tauri-apps/api/path";
 
 const addons = ref([]);// {"isExtension":False, path:"",id}
 
-function checkAddon(addonPath, pathDeep = 0) {
-  /**
-   *  查找文件 __init__.py,blender_manifest.toml
-   *  如果有 blender_manifest.toml 则是新版本的插件
-   */
-  readDir(addonPath).then(async (entry) => {
-    for (const file of entry) {
-      if (file.isFile) {
-        if (file.name === "blender_manifest.toml") {
-          // 新版本插件
-          addons.value.push({"isExtension": true, path: addonPath})
-          return
-        } else if (file.name === "__init__.py") {
-          addons.value.push({"isExtension": false, path: addonPath})
-          return
-        }
-      }
-    }
-    if (pathDeep < 1) {
-      // 既不是插件，也不是插件文件夹
-      // 可能是嵌套文件夹
-      for (const file of entry) {
-        if (file.isDirectory) {
-          const joinPath = await join(addonPath, file.name)
-          checkAddon(joinPath, pathDeep + 1)
-        }
-      }
-    }
-  })
-}
-
-function findAddon(addonPath) {
-  // 1.检查是否为插件
-  // 2.检查是否为插件文件夹
-  lstat(addonPath).then(fi => {
-    if (fi.isDirectory) {
-      checkAddon(addonPath)
-    }
-  })
-}
 
 listen("tauri://drag-drop", async (event) => {
   event.payload.paths.forEach((path) => {
@@ -64,6 +24,7 @@ listen("tauri://drag-drop", async (event) => {
 function clear() {
   addons.value = []
 }
+
 </script>
 
 <template>

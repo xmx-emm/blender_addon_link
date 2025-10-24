@@ -1,4 +1,6 @@
 import {appDataDir, dirname, join} from "@tauri-apps/api/path";
+import {lstat, readDir} from "@tauri-apps/plugin-fs";
+import {useBlenderAddonStore} from "../stores";
 
 function addonIsExtension(version: string): boolean {
     /**
@@ -33,6 +35,49 @@ async function getAddonLinkFolder(version: string, is_extension: boolean) {
         pathJoin.push('scripts', 'addons')
     }
     return await join(...pathJoin)
+}
+
+const blenderAddonStore = useBlenderAddonStore()
+
+function checkAddon(addon_path: string, pathDeep = 0) {
+    /**
+     *  查找文件 __init__.py,blender_manifest.toml
+     *  如果有 blender_manifest.toml 则是新版本的插件
+     */
+
+    readDir(addon_path).then(async (entry) => {
+        for (const file of entry) {
+            if (file.isFile) {
+                if (file.name === "blender_manifest.toml") {
+                    blenderAddonStore.addon_list.push({is_extension: true, addon_path: addon_path,})
+                    return
+                } else if (file.name === "__init__.py") {
+                    blenderAddonStore.addon_list.push({is_extension: false, addon_path: addon_path,})
+                    return
+                }
+            }
+        }
+        if (pathDeep < 1) {
+            // 既不是插件，也不是插件文件夹
+            // 可能是嵌套文件夹
+            for (const file of entry) {
+                if (file.isDirectory) {
+                    const joinPath = await join(addon_path, file.name)
+                    checkAddon(joinPath, pathDeep + 1)
+                }
+            }
+        }
+    })
+}
+
+function findAddon(addon_path: string) {
+    // 1.检查是否为插件
+    // 2.检查是否为插件文件夹
+    lstat(addon_path).then(fi => {
+        if (fi.isDirectory) {
+            checkAddon(addon_path)
+        }
+    })
 }
 
 export {
