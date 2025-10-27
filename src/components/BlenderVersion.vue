@@ -1,40 +1,45 @@
 <script setup lang="ts">
 import {useBlenderAddonStore} from "../stores.js";
-import {computed} from "vue";
+import {ref} from "vue";
 
-const userBlender = useBlenderAddonStore()
+const user_blender = useBlenderAddonStore()
+const add_version = ref("5.1")
 
-const list = computed(() => {
-  return userBlender.blender_version_list
-})
+const rules = {
+  required: (value: string) => !!value || 'Required.',
+  counter: (value: string) => value.length <= 3 || 'Max 3 characters',
+  email: (value: string) => {
+    const pattern = /^\d+.\d+$/
+    return pattern.test(value) || 'Invalid blender version.'
+  },
+}
+
 </script>
 
 <template>
   <v-card>
     <v-card-title>Blender Version</v-card-title>
     <v-card-text>
-      {{ userBlender.blender_version_list }}
-      {{ userBlender.version_list }}
-      <div v-if="userBlender.blender_version_list.length === 0">
-        <v-btn text="Reload" @click="userBlender.restore_blender_version()"/>
+      <div v-if="user_blender.blender_version_list.length === 0">
+        <v-btn text="Reload" @click="user_blender.restore_blender_version()"/>
       </div>
-      <template v-for="(i,index) in userBlender.version_list">
-        <v-chip
-            class="ma-2"
-            color="primary"
-            closable
-            v-tooltip="{ text: 'Right del version', location: 'bottom' }"
-            @click:close="userBlender.remove_blender_version(String(i))"
-        >
-          {{ i }}
-          {{ userBlender.version_list }} {{ index }}
-        </v-chip>
-      </template>
+      <v-chip
+          v-for="i in user_blender.blender_version_list"
+          class="ma-2"
+          color="primary"
+          :key="i"
+          closable
+          @click:close="user_blender.remove_blender_version(String(i))"
+      >
+        {{ i }}
+      </v-chip>
     </v-card-text>
     <v-card-actions>
-      <v-row>
-      </v-row>
-      <v-btn>Clear</v-btn>
+      <v-text-field :model-value="add_version"
+                    :rules="[rules.required, rules.email,rules.counter]"
+                    v-ripple
+      ></v-text-field>
+      <v-btn @click="user_blender.add_blender_version(add_version)">Add{{add_version}}</v-btn>
     </v-card-actions>
   </v-card>
 </template>

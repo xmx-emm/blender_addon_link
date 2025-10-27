@@ -14,9 +14,6 @@ export const useBlenderAddonStore = defineStore("blender_addon", {
                     '4.3',
                     '4.4',
                 ]
-            },
-            version_list(): string[] {
-                return this.blender_version_list;
             }
         },
         actions: {
@@ -24,8 +21,8 @@ export const useBlenderAddonStore = defineStore("blender_addon", {
                 this.blender_version_list = ['4.5', '5.0', '5.1']
             },
             add_blender_version(version: string) {
+                this.blender_version_list.push(version)
                 if (!this.blender_version_list.includes(version)) {
-                    this.blender_version_list.push(version)
                 }
             },
             remove_blender_version(version: string) {
