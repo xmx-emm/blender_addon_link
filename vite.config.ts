@@ -1,20 +1,17 @@
 import {defineConfig} from "vite";
 import vue from "@vitejs/plugin-vue";
-import Components from 'unplugin-vue-components/vite';
-import {PrimeVueResolver} from '@primevue/auto-import-resolver';
 import path from 'path';
+import vuetify from "vite-plugin-vuetify";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
     plugins: [vue(),
-        Components({
-            resolvers: [
-                PrimeVueResolver()
-            ]
-        })],
-
+        vuetify({
+            autoImport: true,
+        }), // Enabled by default
+    ],
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
     //
     // 1. prevent vite from obscuring rust errors
