@@ -1,19 +1,14 @@
 import {defineStore} from 'pinia';
 import {AddonItem} from "./data";
 
-export const useBlenderAddonStore = defineStore("blender_addon", {
+const useBlenderAddonStore = defineStore("blender_addon", {
         state: () => ({
             blender_version_list: ['4.5', '5.0', '5.1'],
             addon_list: <AddonItem[]>[],
         }),
         getters: {
-            other_addon_list() {
-                return [
-                    '4.1',
-                    '4.2',
-                    '4.3',
-                    '4.4',
-                ]
+            sort_blender_version_list(): string[] {
+                return this.blender_version_list.sort((a, b) => a.localeCompare(b));
             }
         },
         actions: {
@@ -47,3 +42,4 @@ export const useBlenderAddonStore = defineStore("blender_addon", {
         persist: true
     },
 );
+export default useBlenderAddonStore

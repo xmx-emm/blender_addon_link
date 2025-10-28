@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {useBlenderAddonStore} from "../stores.js";
+import useBlenderAddonStore from "../stores.js";
 import AddBlenderVersion from "@/components/AddBlenderVersion.vue";
 
 const user_blender = useBlenderAddonStore()
@@ -16,7 +16,7 @@ const user_blender = useBlenderAddonStore()
         </div>
         <v-hover
             v-slot="{ isHovering, props }"
-            v-for="i in user_blender.blender_version_list"
+            v-for="i in user_blender.sort_blender_version_list"
         >
           <v-chip
               v-bind="props"

@@ -1,6 +1,6 @@
 import {appDataDir, dirname, join} from "@tauri-apps/api/path";
 import {lstat, readDir} from "@tauri-apps/plugin-fs";
-import {useBlenderAddonStore} from "../stores";
+import useBlenderAddonStore from "../stores";
 
 const blenderAddonStore = useBlenderAddonStore()
 

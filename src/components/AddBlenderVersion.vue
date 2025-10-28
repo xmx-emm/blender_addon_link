@@ -1,9 +1,11 @@
 <script setup lang="ts">
 
 import {ref} from "vue";
-import {useBlenderAddonStore} from "@/stores.ts";
+import useBlenderAddonStore from "@/stores.ts";
 
 const add_version = ref("5.1")
+
+const otherAddonVersion = ['4.0', '4.1', '4.2', '4.3', '4.4', '4.5', '5.0', '5.1'];
 
 const rules = {
   required: (value: string) => !!value || 'Required.',
@@ -33,7 +35,18 @@ const user_blender = useBlenderAddonStore()
       </v-fab>
     </template>
     <v-sheet>
-      <v-col alignSelf="center">
+      <v-list>
+        <v-row>
+          <template v-for="i in otherAddonVersion">
+            <v-chip
+                :key="i"
+                @click="user_blender.add_blender_version(i)"
+                v-if="!user_blender.blender_version_list.includes(i)"
+            >
+              {{ i }}
+            </v-chip>
+          </template>
+        </v-row>
         <v-text-field v-model="add_version"
                       :rules="[rules.required, rules.bv,rules.chars]"
                       v-ripple
@@ -42,7 +55,7 @@ const user_blender = useBlenderAddonStore()
                :disabled="user_blender.blender_version_list.includes(add_version)"
         >Add{{ add_version }}
         </v-btn>
-      </v-col>
+      </v-list>
     </v-sheet>
   </v-bottom-sheet>
 
