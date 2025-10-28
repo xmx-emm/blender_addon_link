@@ -3,7 +3,7 @@ import App from "./App.vue";
 
 import {createPinia} from 'pinia'
 import piniaPluginPersistedState from 'pinia-plugin-persistedstate';
-
+import './assets/styles/utils.css'
 //vuetify
 import '@mdi/font/css/materialdesignicons.css';
 import vuetify from "@/vuetify.ts";
