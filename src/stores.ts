@@ -6,18 +6,13 @@ const useBlenderAddonStore = defineStore("blender_addon", {
             blender_version_list: ['4.5', '5.0', '5.1'],
             addon_list: <AddonItem[]>[],
         }),
-        getters: {
-            sort_blender_version_list(): string[] {
-                return this.blender_version_list.sort((a, b) => a.localeCompare(b));
-            }
-        },
         actions: {
             restore_blender_version() {
                 this.blender_version_list = ['4.5', '5.0', '5.1']
             },
             add_blender_version(version: string) {
-                this.blender_version_list.push(version)
                 if (!this.blender_version_list.includes(version)) {
+                    this.blender_version_list.push(version)
                 }
             },
             remove_blender_version(version: string) {

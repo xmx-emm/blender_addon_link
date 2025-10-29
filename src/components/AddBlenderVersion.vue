@@ -19,7 +19,9 @@ const user_blender = useBlenderAddonStore()
 </script>
 
 <template>
-  <v-bottom-sheet inset>
+  <v-bottom-sheet inset
+                  maxWidth="400px"
+  >
     <template v-slot:activator="{ props: activatorProps }">
       <v-fab
           v-bind="activatorProps"
@@ -35,11 +37,15 @@ const user_blender = useBlenderAddonStore()
       </v-fab>
     </template>
     <v-sheet>
-      <v-list>
+      <v-col style="overflow: hidden; padding: 20px 20px;">
+        <v-row>
+          Add blender version
+        </v-row>
         <v-row>
           <template v-for="i in otherAddonVersion">
             <v-chip
                 :key="i"
+                class="ma-1"
                 @click="user_blender.add_blender_version(i)"
                 v-if="!user_blender.blender_version_list.includes(i)"
             >
@@ -47,15 +53,18 @@ const user_blender = useBlenderAddonStore()
             </v-chip>
           </template>
         </v-row>
-        <v-text-field v-model="add_version"
-                      :rules="[rules.required, rules.bv,rules.chars]"
-                      v-ripple
-        ></v-text-field>
-        <v-btn @click="user_blender.add_blender_version(add_version)"
-               :disabled="user_blender.blender_version_list.includes(add_version)"
-        >Add{{ add_version }}
-        </v-btn>
-      </v-list>
+        <v-col justify-sm="space-between">
+            <v-text-field v-model="add_version"
+                          :rules="[rules.required, rules.bv,rules.chars]"
+                          v-ripple
+                          maxWidth="200px"
+            ></v-text-field>
+            <v-btn @click="user_blender.add_blender_version(add_version)"
+                   :disabled="user_blender.blender_version_list.includes(add_version)"
+            >Add
+            </v-btn>
+        </v-col>
+      </v-col>
     </v-sheet>
   </v-bottom-sheet>
 

@@ -3,8 +3,8 @@ import BlenderVersion from "@/components/BlenderVersion.vue";
 </script>
 
 <template>
-  <v-app class="not_select not_scrolling">
-    <BlenderVersion/>
+  <v-app class="not_select not_scrollbar">
+    <BlenderVersion class="not_scrollbar"/>
   </v-app>
   <!--  <BlenderLink/>-->
 
