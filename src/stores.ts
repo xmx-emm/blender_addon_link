@@ -22,10 +22,16 @@ const useBlenderAddonStore = defineStore("blender_addon", {
                 }
                 console.log('this.blender_version_list', this.blender_version_list)
             },
+
             add_addon(addon: AddonItem) {
-                if (!this.addon_list.includes(addon)) {
+                if (this.addon_list.filter((f) => {
+                    return f.addon_path === addon.addon_path
+                }).length === 0) {
                     this.addon_list.push(addon)
                 }
+            },
+            clear_addon() {
+                this.addon_list = []
             },
             remove_addon(addon: AddonItem) {
                 console.log('remove_addon', addon)

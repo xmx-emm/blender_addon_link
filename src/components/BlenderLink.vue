@@ -1,47 +1,89 @@
-<!--<script setup lang="ts">-->
-<!--// 拖入文件夹设置文件夹-->
-<!--// 读取那些Blender版本被Link了的,或者是已经有了的-->
-<!--// 功能:-->
-<!--// 1.检查是否为Link文件夹，取消Link-->
-<!--// 2.添加Link，如果不是Link的可以删除重新Link-->
-<!--// 4.列出可添加版本-->
+<script setup lang="ts">
+// 拖入文件夹设置文件夹
+// 读取那些Blender版本被Link了的,或者是已经有了的
+// 功能:
+// 1.检查是否为Link文件夹，取消Link
+// 2.添加Link，如果不是Link的可以删除重新Link
+// 4.列出可添加版本
 
-<!--import {ref} from "vue";-->
-<!--import LinkAddon from "./components/LinkAddon.vue";-->
-<!--import {Event, listen} from "@tauri-apps/api/event";-->
-<!--import {WatchEvent} from "@tauri-apps/plugin-fs";-->
-<!--import {findAddon} from "@/utils/addon.ts";-->
-
-<!--const addons = ref([]);// {"isExtension":False, path:"",id}-->
+import {Event, listen} from "@tauri-apps/api/event";
+import {lstat, readDir, WatchEvent} from "@tauri-apps/plugin-fs";
+import {join} from "@tauri-apps/api/path";
+import useBlenderAddonStore from "@/stores.ts";
+import LinkAddon from "@/components/LinkAddon.vue";
 
 
-<!--listen("tauri://drag-drop", async (event: Event<WatchEvent>) => {-->
-<!--  event.payload.paths.forEach((path) => {-->
-<!--    findAddon(path)-->
-<!--  })-->
-<!--})-->
+const blenderAddonStore = useBlenderAddonStore()
 
-<!--function clear() {-->
-<!--  addons.value = []-->
-<!--}-->
+function checkAddon(addon_path: string, pathDeep = 0) {
+  /**
+   *  查找文件 __init__.py,blender_manifest.toml
+   *  如果有 blender_manifest.toml 则是新版本的插件
+   */
+  readDir(addon_path).then(async (entry) => {
+    for (const file of entry) {
+      if (file.isFile) {
+        console.log(file, addon_path)
+        if (file.name === "blender_manifest.toml") {
+          blenderAddonStore.add_addon({is_extension: true, addon_path: addon_path,})
+          return
+        } else if (file.name === "__init__.py") {
+          blenderAddonStore.add_addon({is_extension: false, addon_path: addon_path,})
+          return
+        }
+      }
+    }
+    if (pathDeep < 1) {
+      // 既不是插件，也不是插件文件夹
+      // 可能是嵌套文件夹
+      for (const file of entry) {
+        if (file.isDirectory) {
+          const joinPath = await join(addon_path, file.name)
+          checkAddon(joinPath, pathDeep + 1)
+        }
+      }
+    }
+  })
+}
 
-<!--</script>-->
+function findAddon(addon_path: string) {
+  // 1.检查是否为插件
+  // 2.检查是否为插件文件夹
+  lstat(addon_path).then(fi => {
+    if (fi.isDirectory) {
+      checkAddon(addon_path)
+    }
+  })
+}
 
-<!--<template>-->
-<!--  <div>-->
-<!--    <div v-if="addons.length !== 0">-->
-<!--      <Button label="Clear" @click="clear">Clear</Button>-->
-<!--      <p>Test Blender Link</p>-->
-<!--      <div v-for="addon in addons">-->
-<!--        <LinkAddon :addonPath="addon.path" :is-extension="addon.isExtension"/>-->
-<!--      </div>-->
-<!--    </div>-->
-<!--    <div v-else>-->
-<!--      <p>Drag Addon Folder Here</p>-->
-<!--    </div>-->
-<!--  </div>-->
-<!--</template>-->
+listen("tauri://drag-drop", async (event: Event<WatchEvent>) => {
+  event.payload.paths.forEach((path) => {
+    findAddon(path)
+  })
+})
 
-<!--<style scoped>-->
+</script>
 
-<!--</style>-->
+<template>
+  <div>
+    <div v-if="blenderAddonStore.addon_list.length !== 0">
+      <v-btn label="Clear" @click="blenderAddonStore.clear_addon()">Clear</v-btn>
+      <p>Test Blender Link</p>
+      <div v-for="addon in blenderAddonStore.addon_list">
+        <LinkAddon :addon_path="addon.addon_path" :is_extension="addon.is_extension"/>
+        {{ addon }}
+
+      </div>
+    </div>
+    <div v-else>
+      <v-col>
+
+        <p>Drag Addon Folder Here</p>
+      </v-col>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+
+</style>
