@@ -3,7 +3,8 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use fs::create_dir_all;
 use std::fs;
-use std::fs::remove_dir;
+use std::fs::{remove_dir, symlink_metadata, File};
+use std::os::windows::fs::symlink_dir;
 use std::path::Path;
 use std::process::Command;
 
@@ -41,13 +42,24 @@ fn link_dir(from: &str, to: &str) {
 fn unlink_dir(ud: &str) {
     remove_dir(ud).unwrap()
 }
+#[tauri::command]
+fn is_symbolic_link(path: &str) -> Result<bool, String> {
+    match symlink_metadata(path){
+        Ok(metadata) => {Ok(metadata.file_type().is_symlink())},
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![link_dir, unlink_dir])
+        .invoke_handler(tauri::generate_handler![
+            link_dir,
+            unlink_dir,
+            is_symbolic_link
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

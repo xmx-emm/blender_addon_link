@@ -2,7 +2,7 @@
 
 import {onBeforeMount, ref} from "vue";
 import {basename, join} from "@tauri-apps/api/path";
-import {exists, lstat} from "@tauri-apps/plugin-fs";
+import {exists} from "@tauri-apps/plugin-fs";
 import {getAddonLinkFolder} from "@/utils/addon.ts";
 import useBlenderAddonStore from "@/stores.ts";
 import {AddonLinkItem} from "@/data.ts";
@@ -40,10 +40,9 @@ async function checkAddon(version: string) {
   let is_sym_link = false;
   if (is_exists) {
     try {
-      const state = await lstat(link_addon_path);
-      is_sym_link = state.isSymlink;
+      is_sym_link = await invoke("is_symbolic_link", {path: link_addon_path});
     } catch (e) {
-      // console.log("checkAddon error", version, e)
+      console.log("checkAddon error", version, e)
     }
   }
 
@@ -62,7 +61,7 @@ async function checkAddon(version: string) {
 }
 
 function link(addon: AddonLinkItem) {
-  const args = {to: props.addon_path || "unknown", from: addon.install_folder}
+  const args = {from: props.addon_path || "unknown", to: addon.install_folder}
   invoke("link_dir", args).then(() => {
     checkAddon(addon.blender_version)
   })
@@ -78,6 +77,7 @@ async function unlink(addon: AddonLinkItem) {
 
 function click(addon: AddonLinkItem) {
   checkAddon(addon.blender_version)
+  console.log("click", addon)
   if (addon.is_exists || addon.is_symbolic_link) {
     unlink(addon)
   } else {
@@ -96,9 +96,9 @@ function click(addon: AddonLinkItem) {
             v-for="addon in link_addon_list.sort((a, b) => a.blender_version.localeCompare(b.blender_version))"
             @click="click(addon)"
             style="margin-right: 10px"
-            :append-icon="addon.is_exists ? (addon.is_symbolic_link ? 'mdi-check': 'mdi-help'): 'mdi-close'"
-            v-tooltip="addon.is_exists ? (addon.is_symbolic_link ? 'Link addon': 'Remove addon!!'): 'Unlink addon!'"
-            :color="addon.is_exists ? (addon.is_symbolic_link ? 'green': 'red'): 'primary'"
+            :append-icon="addon.is_exists ? (addon.is_symbolic_link ? 'mdi-check': 'mdi-exclamation'): 'mdi-close'"
+            v-tooltip="{text: (addon.is_exists ? (addon.is_symbolic_link ? 'Link addon': 'Remove addon!!'): 'Unlink addon!')+' ' +addon.blender_version, location:'bottom'}"
+            :color="addon.is_exists ? (addon.is_symbolic_link ? 'green': 'red'): 'secondary'"
         >
           {{ addon.blender_version }}
         </v-chip>
