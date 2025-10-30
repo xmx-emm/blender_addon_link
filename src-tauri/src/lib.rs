@@ -2,9 +2,10 @@ extern crate alloc;
 
 use alloc::string::{String, ToString};
 use fs::create_dir_all;
+use std::fs;
+use std::fs::remove_dir;
 use std::path::Path;
 use std::process::Command;
-use std::fs;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 //mklink /J "C:\Users\Use\AppData\Roaming\Blender Foundation\Blender\4.2\extensions\user_default\aaa" "D:\Blender Addon\simple_deform_helper"
@@ -12,6 +13,7 @@ use std::fs;
 fn link_dir(from: &str, to: &str) {
     let args = ["mklink", "/J", &to.to_string(), &from.to_string()];
     let path = Path::new(to).parent().unwrap();
+    println!("link_dir from:{} to:{}", from, to);
     if path.exists() {
         println!("Path exists");
     } else {
@@ -29,8 +31,15 @@ fn link_dir(from: &str, to: &str) {
     if output.status.success() {
         println!("Link created successfully {:?}", args);
     } else {
-        eprintln!("Failed to create link: {:?}", String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "Failed to create link: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
+}
+#[tauri::command]
+fn unlink_dir(ud: &str) {
+    remove_dir(ud).unwrap()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,7 +47,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![link_dir])
+        .invoke_handler(tauri::generate_handler![link_dir, unlink_dir])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

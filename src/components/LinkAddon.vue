@@ -1,11 +1,12 @@
 <script setup lang="ts">
 
-import {onBeforeMount, onMounted, ref} from "vue";
+import {onBeforeMount, ref} from "vue";
 import {basename, join} from "@tauri-apps/api/path";
 import {exists, lstat} from "@tauri-apps/plugin-fs";
 import {getAddonLinkFolder} from "@/utils/addon.ts";
 import useBlenderAddonStore from "@/stores.ts";
 import {AddonLinkItem} from "@/data.ts";
+import {invoke} from "@tauri-apps/api/core";
 
 
 const props = defineProps({
@@ -19,55 +20,89 @@ const addon_name = ref("unknown")
 
 const link_addon_list = ref<AddonLinkItem[]>([])
 
-onMounted(async () => {
-      try {
-        link_addon_list.value = []
-        for (const version of userBlender.blender_version_list) {
-          const addonFolder = await getAddonLinkFolder(version, props.is_extension)
-          const linkAddonPath = await join(addonFolder, addon_name.value)
-          const state = await lstat(linkAddonPath);
-          link_addon_list.value.push({
-            blender_version: version,
-            install_folder: linkAddonPath,
-            is_exists: await exists(linkAddonPath),
-            is_symbolic_link: state.isSymlink
-          })
-        }
-      } catch (e) {
-        console.log("ee", e)
-      }
-    }
-)
 
 onBeforeMount(async () => {
   addon_name.value = await basename(<string>props.addon_path)
+  link_addon_list.value = []
+  try {
+    for (const version of userBlender.blender_version_list) {
+      await checkAddon(version)
+    }
+  } catch (e) {
+    console.log("link_addon_list error", e, props,)
+  }
 })
 
-function link(addon: AddonLinkItem) {
-  console.log("link", addon)
+async function checkAddon(version: string) {
+  const addon_folder = await getAddonLinkFolder(version, props.is_extension)
+  const link_addon_path = await join(addon_folder, addon_name.value)
+  const is_exists = await exists(link_addon_path);
+  let is_sym_link = false;
+  if (is_exists) {
+    try {
+      const state = await lstat(link_addon_path);
+      is_sym_link = state.isSymlink;
+    } catch (e) {
+      // console.log("checkAddon error", version, e)
+    }
+  }
+
+  const item = {
+    blender_version: version,
+    install_folder: link_addon_path,
+    is_exists: is_exists,
+    is_symbolic_link: is_sym_link,
+  }
+  const index = link_addon_list.value.findIndex(f => f.blender_version === version)
+  if (index !== -1) {
+    link_addon_list.value.splice(index, 1, item)
+  } else {
+    link_addon_list.value.push(item)
+  }
 }
 
-function unlink(addon: AddonLinkItem) {
-  console.log("unlink", addon)
+function link(addon: AddonLinkItem) {
+  const args = {to: props.addon_path || "unknown", from: addon.install_folder}
+  invoke("link_dir", args).then(() => {
+    checkAddon(addon.blender_version)
+  })
+}
+
+async function unlink(addon: AddonLinkItem) {
+  if (await exists(addon.install_folder)) {
+    invoke("unlink_dir", {ud: addon.install_folder}).then(() => {
+      checkAddon(addon.blender_version)
+    })
+  }
+}
+
+function click(addon: AddonLinkItem) {
+  checkAddon(addon.blender_version)
+  if (addon.is_exists || addon.is_symbolic_link) {
+    unlink(addon)
+  } else {
+    link(addon)
+  }
 }
 
 </script>
 
 <template>
   <div class="flex flex-col">
-    <v-card :header="addon_name" toggleable>
+    <v-card :title="addon_name" toggleable>
+      <v-card-subtitle>Path: {{ props.addon_path }}</v-card-subtitle>
       <v-card-text>
-        <p>Path: {{ props.addon_path }}</p>
-        {{ link_addon_list }}
-        <div v-for="addon in link_addon_list">
+        <v-chip
+            v-for="addon in link_addon_list.sort((a, b) => a.blender_version.localeCompare(b.blender_version))"
+            @click="click(addon)"
+            style="margin-right: 10px"
+            :append-icon="addon.is_exists ? (addon.is_symbolic_link ? 'mdi-check': 'mdi-help'): 'mdi-close'"
+            v-tooltip="addon.is_exists ? (addon.is_symbolic_link ? 'Link addon': 'Remove addon!!'): 'Unlink addon!'"
+            :color="addon.is_exists ? (addon.is_symbolic_link ? 'green': 'red'): 'primary'"
+        >
           {{ addon.blender_version }}
-          <v-btn @click="link(addon)" text v-if="!addon.is_exists">
-            Link
-          </v-btn>
-          <v-btn @click="unlink(addon)" text severity="danger" v-else>
-            Unlink
-          </v-btn>
-        </div>
+        </v-chip>
+        <v-spacer></v-spacer>
       </v-card-text>
     </v-card>
   </div>

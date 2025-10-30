@@ -71,13 +71,10 @@ listen("tauri://drag-drop", async (event: Event<WatchEvent>) => {
       <p>Test Blender Link</p>
       <div v-for="addon in blenderAddonStore.addon_list">
         <LinkAddon :addon_path="addon.addon_path" :is_extension="addon.is_extension"/>
-        {{ addon }}
-
       </div>
     </div>
     <div v-else>
       <v-col>
-
         <p>Drag Addon Folder Here</p>
       </v-col>
     </div>
