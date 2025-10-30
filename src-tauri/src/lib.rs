@@ -3,8 +3,7 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use fs::create_dir_all;
 use std::fs;
-use std::fs::{remove_dir, symlink_metadata, File};
-use std::os::windows::fs::symlink_dir;
+use std::fs::{remove_dir, symlink_metadata};
 use std::path::Path;
 use std::process::Command;
 
@@ -44,8 +43,8 @@ fn unlink_dir(ud: &str) {
 }
 #[tauri::command]
 fn is_symbolic_link(path: &str) -> Result<bool, String> {
-    match symlink_metadata(path){
-        Ok(metadata) => {Ok(metadata.file_type().is_symlink())},
+    match symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.file_type().is_symlink()),
         Err(e) => Err(e.to_string()),
     }
 }
