@@ -1,6 +1,7 @@
 export interface AddonItem {
     addon_path: string,
     is_extension: boolean,//blender_manifest.toml 是新的扩展
+    is_expand: boolean,
 }
 
 export interface AddonLinkItem {

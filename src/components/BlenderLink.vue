@@ -10,7 +10,7 @@ import {Event, listen} from "@tauri-apps/api/event";
 import {lstat, readDir, WatchEvent} from "@tauri-apps/plugin-fs";
 import {join} from "@tauri-apps/api/path";
 import useBlenderAddonStore from "@/stores.ts";
-import LinkAddon from "@/components/LinkAddon.vue";
+import LinkAddonList from "@/components/LinkAddonList.vue";
 
 
 const blenderAddonStore = useBlenderAddonStore()
@@ -25,10 +25,10 @@ function checkAddon(addon_path: string, pathDeep = 0) {
       if (file.isFile) {
         console.log(file, addon_path)
         if (file.name === "blender_manifest.toml") {
-          blenderAddonStore.add_addon({is_extension: true, addon_path: addon_path,})
+          blenderAddonStore.add_addon({is_extension: true, addon_path: addon_path, is_expand: false})
           return
         } else if (file.name === "__init__.py") {
-          blenderAddonStore.add_addon({is_extension: false, addon_path: addon_path,})
+          blenderAddonStore.add_addon({is_extension: false, addon_path: addon_path, is_expand: false})
           return
         }
       }
@@ -65,20 +65,21 @@ listen("tauri://drag-drop", async (event: Event<WatchEvent>) => {
 </script>
 
 <template>
-  <div>
-    <div v-if="blenderAddonStore.addon_list.length !== 0">
-      <v-btn label="Clear" @click="blenderAddonStore.clear_addon()">Clear</v-btn>
-      <p>Test Blender Link</p>
-      <div v-for="addon in blenderAddonStore.addon_list">
-        <LinkAddon :addon_path="addon.addon_path" :is_extension="addon.is_extension"/>
-      </div>
-    </div>
-    <div v-else>
-      <v-col>
-        <p>Drag Addon Folder Here</p>
-      </v-col>
-    </div>
-  </div>
+  <template v-if="blenderAddonStore.addon_list.length !== 0">
+    <v-list style="overflow: auto">
+      <template v-for="(addon,index,) in blenderAddonStore.addon_list">
+        <LinkAddonList
+            :addon="addon"
+        />
+        <v-divider v-if="blenderAddonStore.addon_list.length-1 !== index"></v-divider>
+      </template>
+    </v-list>
+  </template>
+  <template v-else>
+    <v-col>
+      <p>Drag Addon Folder Here</p>
+    </v-col>
+  </template>
 </template>
 
 <style scoped>

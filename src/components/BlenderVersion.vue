@@ -11,7 +11,12 @@ const sort_blender_version_list = computed(() => {
 
 <template>
   <v-card>
-    <v-card-title>Blender Version</v-card-title>
+    <v-card-title>
+      <p>
+      Blender Version
+      <AddBlenderVersion/>
+      </p>
+    </v-card-title>
     <v-card-text>
       <v-row>
         <div v-if="user_blender.blender_version_list.length === 0">
@@ -34,7 +39,6 @@ const sort_blender_version_list = computed(() => {
         </v-hover>
         <v-spacer></v-spacer>
       </v-row>
-      <AddBlenderVersion/>
     </v-card-text>
   </v-card>
 </template>
