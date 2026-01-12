@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use fs::create_dir_all;
 use std::fs;
-use std::fs::{remove_dir, symlink_metadata};
+use std::fs::{remove_dir_all, symlink_metadata};
 use std::path::Path;
 use std::process::Command;
 
@@ -39,8 +39,9 @@ fn link_dir(from: &str, to: &str) {
 }
 #[tauri::command]
 fn unlink_dir(ud: &str) {
-    remove_dir(ud).unwrap()
+    remove_dir_all(ud);
 }
+
 #[tauri::command]
 fn is_symbolic_link(path: &str) -> Result<bool, String> {
     match symlink_metadata(path) {
