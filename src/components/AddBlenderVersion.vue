@@ -28,10 +28,10 @@ const user_blender = useBlenderAddonStore()
           color="primary"
           icon="mdi-plus"
           variant="tonal"
-          location="top end"
-          size="small"
+          location="top right"
+          size="x-small"
           absolute
-          class="ma-9"
+          style="margin: 20px 10px"
           offset
       >
       </v-fab>
@@ -54,15 +54,15 @@ const user_blender = useBlenderAddonStore()
           </template>
         </v-row>
         <v-col justify-sm="space-between">
-            <v-text-field v-model="add_version"
-                          :rules="[rules.required, rules.bv,rules.chars]"
-                          v-ripple
-                          maxWidth="200px"
-            ></v-text-field>
-            <v-btn @click="user_blender.add_blender_version(add_version)"
-                   :disabled="user_blender.blender_version_list.includes(add_version)"
-            >Add
-            </v-btn>
+          <v-text-field v-model="add_version"
+                        :rules="[rules.required, rules.bv,rules.chars]"
+                        v-ripple
+                        maxWidth="200px"
+          ></v-text-field>
+          <v-btn @click="user_blender.add_blender_version(add_version)"
+                 :disabled="user_blender.blender_version_list.includes(add_version)"
+          >Add
+          </v-btn>
         </v-col>
       </v-col>
     </v-sheet>
