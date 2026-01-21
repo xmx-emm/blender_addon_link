@@ -38,8 +38,17 @@ fn link_dir(from: &str, to: &str) {
     }
 }
 #[tauri::command]
-fn unlink_dir(ud: &str) {
-    remove_dir_all(ud);
+fn unlink_dir(ud: &str) -> Result<bool, String> {
+    match remove_dir_all(ud) {
+        Ok(_) => {
+            if Path::new(ud).exists() {
+                Err(String::from("Failed to delete directory"))
+            } else {
+                Ok(true)
+            }
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[tauri::command]

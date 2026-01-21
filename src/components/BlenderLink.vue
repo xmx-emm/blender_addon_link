@@ -68,9 +68,7 @@ listen("tauri://drag-drop", async (event: Event<WatchEvent>) => {
   <template v-if="blenderAddonStore.addon_list.length !== 0">
     <v-list style="overflow: auto">
       <template v-for="(addon,index,) in blenderAddonStore.addon_list">
-        <LinkAddonList
-            :addon="addon"
-        />
+        <LinkAddonList            :addon="addon"        />
         <v-divider v-if="blenderAddonStore.addon_list.length-1 !== index"></v-divider>
       </template>
     </v-list>

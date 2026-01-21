@@ -5,7 +5,6 @@ import {exists} from "@tauri-apps/plugin-fs";
 
 const props = defineProps(["link_addon_list", "addon", "addon_name"])
 const emits = defineEmits(["checkAddon"])
-
 function link(addon: AddonLinkItem) {
   const args = {from: props.addon.addon_path || "unknown", to: addon.install_folder}
   invoke("link_dir", args).then(() => {
@@ -17,6 +16,8 @@ async function unlink(addon: AddonLinkItem) {
   if (await exists(addon.install_folder)) {
     invoke("unlink_dir", {ud: addon.install_folder}).then(() => {
       emits("checkAddon", addon.blender_version)
+    }).catch((e) => {
+      console.log("unlink_dir error", e)
     })
   }
 }
