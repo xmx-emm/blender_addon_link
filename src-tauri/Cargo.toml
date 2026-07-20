@@ -1,6 +1,6 @@
 [package]
 name = "blender-link"
-version = "0.1.2"
+version = "0.2.0"
 description = "Blender Addon link"
 authors = ["小萌新"]
 edition = "2021"
@@ -21,6 +21,21 @@ tauri-build = { version = "2.5.1", features = [] }
 tauri = { version = "2.9.1", features = [] }
 tauri-plugin-shell = "2.3.1"
 tauri-plugin-fs = "2.4.2"
-#serde = { version = "1.0.228", features = ["derive"] }
-#serde_json = "1.0.145"
-#tauri-plugin-notification = { version = "2.3.1", features = [ "windows7-compat" ] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# .blend 文件解压
+zstd = "0.13"
+flate2 = "1"
+# 注册表探测已安装的 Blender
+winreg = "0.55"
+# 缩略图数据编码
+base64 = "0.22"
+# NTFS junction 创建（替代 cmd mklink，错误信息更可靠）
+junction = "1"
+# 渲染完成系统通知
+tauri-plugin-notification = "2"
+# 记忆窗口大小与位置
+tauri-plugin-window-state = "2"
+# 渲染期间防休眠（SetThreadExecutionState）
+windows-sys = { version = "0.60", features = ["Win32_System_Power"] }

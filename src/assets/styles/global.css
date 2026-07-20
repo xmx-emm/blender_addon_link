@@ -1,38 +1,79 @@
-/*隐藏主框的滚动条*/
+/* 隐藏主框滚动条 */
 body {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
-/*隐藏主框的滚动条*/
 html::-webkit-scrollbar {
-  display: none;
+    display: none;
 }
 
-/* 设置滚动条的宽度 */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+    width: 6px;
+    height: 6px;
 }
 
-/* 设置滚动条滑块的颜色和圆角 */
 ::-webkit-scrollbar-thumb {
-  background-color: #888;
-  border-radius: 6px;
+    background-color: #4a4a55;
+    border-radius: 6px;
 }
 
-/*!* 设置滚动条轨道的颜色和圆角 *!*/
-/*::-webkit-scrollbar-track {*/
-/*  background-color: #f1f1f1;*/
-/*  border-radius: 6px;*/
-/*}*/
+::-webkit-scrollbar-thumb:hover {
+    background-color: #62626e;
+}
 
-/*!* 设置滚动条按钮的颜色 *!*/
-/*::-webkit-scrollbar-button {*/
-/*  background-color: #ccc;*/
-/*}*/
+/* 页面通用布局 */
+.page-wrap {
+    padding: 20px 24px 28px;
+    max-width: 1280px;
+    margin: 0 auto;
+}
 
-/*!* 设置滚动条与其他元素交界处的颜色 *!*/
-/*::-webkit-scrollbar-corner {*/
-/*  background-color: #f1f1f1;*/
-/*}*/
+.page-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+.mono {
+    font-family: Consolas, 'Cascadia Mono', monospace;
+}
+
+.dim {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.card-soft {
+    background: rgb(var(--v-theme-surface));
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    transition: border-color .15s ease;
+}
+
+.card-soft:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* 空状态 */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 16px;
+    color: rgba(255, 255, 255, 0.45);
+    border: 1.5px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    gap: 10px;
+    text-align: center;
+}
+
+.empty-state .v-icon {
+    opacity: 0.5;
+}

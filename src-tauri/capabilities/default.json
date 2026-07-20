@@ -7,14 +7,18 @@
   ],
   "permissions": [
     "core:default",
-    "shell:allow-open",
+    "core:event:default",
     "core:window:deny-start-dragging",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "dialog:default",
+    "dialog:allow-open",
+    "notification:default",
     "fs:default",
     "fs:read-all",
     "fs:read-files",
     "fs:read-meta",
     "fs:allow-remove",
-    "shell:allow-execute",
     {
       "identifier": "fs:allow-exists",
       "allow": [

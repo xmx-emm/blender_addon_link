@@ -38,4 +38,15 @@ export default defineConfig(async () => ({
             '@': path.resolve(__dirname, 'src'), // 设置 @ 指向 src
         },
     },
+    build: {
+        chunkSizeWarningLimit: 900,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vuetify: ['vuetify'],
+                    vue: ['vue', 'pinia'],
+                },
+            },
+        },
+    },
 }));
