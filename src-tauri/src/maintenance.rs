@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::procutil::{hidden_command, run_with_timeout};
@@ -207,29 +207,47 @@ pub struct PurgeResult {
 
 const PURGE_MARKER: &str = "@@BL_PURGE@@";
 
+/// 校验 exe 与 .blend 都存在
+fn check_exe_and_blend(exe: &str, path: &str) -> Result<(), String> {
+    if !Path::new(path).is_file() {
+        return Err(format!(".blend 文件不存在: {path}"));
+    }
+    if !Path::new(exe).is_file() {
+        return Err(format!("blender.exe 不存在: {exe}"));
+    }
+    Ok(())
+}
+
+/// 把文件备份为 .bak（已存在则带时间戳），返回备份路径
+fn backup_file(path: &str) -> Result<PathBuf, String> {
+    let mut backup = PathBuf::from(format!("{path}.bak"));
+    if backup.exists() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        backup = PathBuf::from(format!("{path}.{ts}.bak"));
+    }
+    std::fs::copy(Path::new(path), &backup).map_err(|e| format!("备份失败: {e}"))?;
+    Ok(backup)
+}
+
+/// 从 Blender stdout 里取 marker 后面的内容
+fn find_marker<'a>(stdout: &'a str, marker: &str) -> Option<&'a str> {
+    stdout
+        .lines()
+        .find_map(|l| l.trim().strip_prefix(marker))
+        .map(str::trim)
+}
+
 /// 清理 .blend 孤立数据：先备份，再用 Blender 后台 orphans_purge 并保存
 #[tauri::command]
 pub async fn purge_orphans(exe: String, path: String) -> Result<PurgeResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        check_exe_and_blend(&exe, &path)?;
         let src = Path::new(&path);
-        if !src.is_file() {
-            return Err(format!(".blend 文件不存在: {path}"));
-        }
-        if !Path::new(&exe).is_file() {
-            return Err(format!("blender.exe 不存在: {exe}"));
-        }
         let old_size = src.metadata().map(|m| m.len()).unwrap_or(0);
-
-        // 备份为 .bak（已存在则带时间戳）
-        let mut backup = PathBuf::from(format!("{path}.bak"));
-        if backup.exists() {
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            backup = PathBuf::from(format!("{path}.{ts}.bak"));
-        }
-        std::fs::copy(src, &backup).map_err(|e| format!("备份失败: {e}"))?;
+        let backup = backup_file(&path)?;
 
         let expr = format!(
             "import bpy, sys\n\
@@ -243,11 +261,8 @@ pub async fn purge_orphans(exe: String, path: String) -> Result<PurgeResult, Str
         // factory-startup：避免用户插件的 load/save 钩子在清理过程中改动文件
         cmd.args(["-b", "--factory-startup", &path, "--python-expr", &expr]);
         let out = run_with_timeout(cmd, 600, None)?;
-        let removed = out
-            .stdout
-            .lines()
-            .find_map(|l| l.trim().strip_prefix(PURGE_MARKER))
-            .and_then(|s| s.trim().parse::<i64>().ok());
+        let removed =
+            find_marker(&out.stdout, PURGE_MARKER).and_then(|s| s.parse::<i64>().ok());
         let Some(removed) = removed else {
             return Err(format!(
                 "清理未完成（退出码 {}）。原文件未受影响，备份在 {}",
@@ -265,4 +280,217 @@ pub async fn purge_orphans(exe: String, path: String) -> Result<PurgeResult, Str
     })
     .await
     .map_err(|e| format!("清理线程异常: {e}"))?
+}
+
+// ---- 配置迁移 ----
+
+/// 值得跨版本迁移的用户配置文件
+const MIGRATE_FILES: &[&str] = &["userpref.blend", "startup.blend", "bookmarks.txt"];
+
+/// 推导迁移的源/目标 config 目录（纯函数，便于测试）
+fn migrate_config_dirs(root: &Path, from: &str, to: &str) -> (PathBuf, PathBuf) {
+    (root.join(from).join("config"), root.join(to).join("config"))
+}
+
+/// 把旧版本的 userpref.blend / startup.blend / bookmarks.txt 复制到新版本 config 目录。
+/// 目标已存在的文件先备份为 .bak。返回复制成功的文件名列表。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn migrate_config(from_version: String, to_version: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if from_version == to_version {
+            return Err("源版本与目标版本相同".into());
+        }
+        let root = appdata_blender_root().ok_or("读取 APPDATA 环境变量失败")?;
+        let (src_dir, dst_dir) = migrate_config_dirs(&root, &from_version, &to_version);
+        if !src_dir.is_dir() {
+            return Err(format!(
+                "源版本没有配置目录：{}（该版本可能还没启动过）",
+                src_dir.to_string_lossy()
+            ));
+        }
+        std::fs::create_dir_all(&dst_dir).map_err(|e| format!("创建目标目录失败: {e}"))?;
+        let mut copied: Vec<String> = vec![];
+        for name in MIGRATE_FILES {
+            let src = src_dir.join(name);
+            if !src.is_file() {
+                continue;
+            }
+            let dst = dst_dir.join(name);
+            if dst.exists() {
+                let bak = dst_dir.join(format!("{name}.bak"));
+                std::fs::copy(&dst, &bak).map_err(|e| format!("备份目标 {name} 失败: {e}"))?;
+            }
+            std::fs::copy(&src, &dst).map_err(|e| format!("复制 {name} 失败: {e}"))?;
+            copied.push(name.to_string());
+        }
+        if copied.is_empty() {
+            return Err(
+                "源版本配置目录里没有可迁移的文件（userpref.blend / startup.blend / bookmarks.txt）"
+                    .into(),
+            );
+        }
+        Ok(copied)
+    })
+    .await
+    .map_err(|e| format!("迁移线程异常: {e}"))?
+}
+
+// ---- 打包贴图解包 + 丢失文件检查 ----
+
+#[derive(Serialize, Deserialize)]
+pub struct PackedFile {
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MissingFile {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileCheckResult {
+    pub packed: Vec<PackedFile>,
+    pub missing: Vec<MissingFile>,
+}
+
+const CHECK_MARKER: &str = "@@BL_CHECK@@";
+const UNPACK_MARKER: &str = "@@BL_UNPACK@@";
+
+/// 检查脚本：列出打包文件与外链丢失文件（只读，不保存）
+const CHECK_SCRIPT: &str = r#"import bpy, json, os, sys
+packed = []
+missing = []
+for coll_name in ('images', 'sounds', 'volumes', 'libraries', 'fonts'):
+    coll = getattr(bpy.data, coll_name, None)
+    if coll is None:
+        continue
+    for d in coll:
+        pf = getattr(d, 'packed_file', None)
+        if pf is not None:
+            packed.append({'name': d.name, 'size': int(pf.size)})
+            continue
+        fp = getattr(d, 'filepath', '') or ''
+        if not fp or fp.startswith('<builtin'):
+            continue
+        try:
+            ap = bpy.path.abspath(fp, library=getattr(d, 'library', None))
+        except Exception:
+            ap = fp
+        if not os.path.exists(ap):
+            missing.append({'name': d.name, 'path': ap})
+print('@@BL_CHECK@@' + json.dumps({'packed': packed, 'missing': missing}))
+sys.stdout.flush()
+sys.exit(0)
+"#;
+
+/// 检查 .blend 的打包文件与丢失的外部文件（只读，不修改文件）
+#[tauri::command]
+pub async fn check_blend_files(exe: String, path: String) -> Result<FileCheckResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_exe_and_blend(&exe, &path)?;
+        let mut cmd = hidden_command(&exe);
+        cmd.args(["-b", "--factory-startup", &path, "--python-expr", CHECK_SCRIPT]);
+        let out = run_with_timeout(cmd, 600, None)?;
+        let Some(json) = find_marker(&out.stdout, CHECK_MARKER) else {
+            return Err(format!(
+                "检查未完成（退出码 {}）。stderr 末行：{}",
+                out.code,
+                out.stderr.lines().last().unwrap_or("")
+            ));
+        };
+        serde_json::from_str::<FileCheckResult>(json).map_err(|e| format!("解析检查结果失败: {e}"))
+    })
+    .await
+    .map_err(|e| format!("检查线程异常: {e}"))?
+}
+
+#[derive(Serialize)]
+pub struct UnpackResult {
+    pub unpacked: i64,
+    pub old_size: u64,
+    pub new_size: u64,
+    pub backup: String,
+}
+
+/// 解包脚本：USE_LOCAL 把打包文件写到 .blend 旁的 textures/ 等目录，然后保存
+const UNPACK_SCRIPT: &str = r#"import bpy, sys
+def count_packed():
+    n = 0
+    for coll_name in ('images', 'sounds', 'volumes', 'libraries', 'fonts'):
+        coll = getattr(bpy.data, coll_name, None)
+        if coll is None:
+            continue
+        for d in coll:
+            if getattr(d, 'packed_file', None) is not None:
+                n += 1
+    return n
+before = count_packed()
+bpy.ops.file.unpack_all(method='USE_LOCAL')
+after = count_packed()
+bpy.ops.wm.save_mainfile()
+print('@@BL_UNPACK@@' + str(before - after))
+sys.stdout.flush()
+sys.exit(0)
+"#;
+
+/// 解包全部打包文件（USE_LOCAL：写到 .blend 同目录 textures/ 等），保存前先备份 .bak
+#[tauri::command]
+pub async fn unpack_blend(exe: String, path: String) -> Result<UnpackResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_exe_and_blend(&exe, &path)?;
+        let src = Path::new(&path);
+        let old_size = src.metadata().map(|m| m.len()).unwrap_or(0);
+        let backup = backup_file(&path)?;
+
+        let mut cmd = hidden_command(&exe);
+        cmd.args(["-b", "--factory-startup", &path, "--python-expr", UNPACK_SCRIPT]);
+        let out = run_with_timeout(cmd, 600, None)?;
+        let unpacked =
+            find_marker(&out.stdout, UNPACK_MARKER).and_then(|s| s.parse::<i64>().ok());
+        let Some(unpacked) = unpacked else {
+            return Err(format!(
+                "解包未完成（退出码 {}）。原文件未受影响，备份在 {}",
+                out.code,
+                backup.to_string_lossy()
+            ));
+        };
+        let new_size = src.metadata().map(|m| m.len()).unwrap_or(0);
+        Ok(UnpackResult {
+            unpacked,
+            old_size,
+            new_size,
+            backup: backup.to_string_lossy().to_string(),
+        })
+    })
+    .await
+    .map_err(|e| format!("解包线程异常: {e}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_marker, migrate_config_dirs, CHECK_MARKER, PURGE_MARKER};
+    use std::path::Path;
+
+    #[test]
+    fn migrate_dirs_derived_from_versions() {
+        let root = Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender");
+        let (src, dst) = migrate_config_dirs(root, "4.2", "5.2");
+        assert_eq!(
+            src,
+            Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender\4.2\config")
+        );
+        assert_eq!(
+            dst,
+            Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender\5.2\config")
+        );
+    }
+
+    #[test]
+    fn find_marker_extracts_payload() {
+        let stdout = "Blender 5.2.0\nRead blend ok\n  @@BL_PURGE@@42  \nBlender quit\n";
+        assert_eq!(find_marker(stdout, PURGE_MARKER), Some("42"));
+        assert_eq!(find_marker(stdout, CHECK_MARKER), None);
+    }
 }

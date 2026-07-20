@@ -1,16 +1,33 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
+use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::procutil::hidden_command;
 
-static RUNNING: AtomicBool = AtomicBool::new(false);
-static CANCEL: AtomicBool = AtomicBool::new(false);
-static CHILD_PID: AtomicU32 = AtomicU32::new(0);
+/// 正在运行的渲染任务：job_id -> 子进程 pid（支持多任务并行）
+static REGISTRY: LazyLock<Mutex<HashMap<String, u32>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// 被请求取消的 job_id 集合
+static CANCELLED: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+fn is_cancelled(job_id: &str) -> bool {
+    CANCELLED
+        .lock()
+        .map(|s| s.contains(job_id))
+        .unwrap_or(false)
+}
+
+fn clear_cancel(job_id: &str) {
+    if let Ok(mut s) = CANCELLED.lock() {
+        s.remove(job_id);
+    }
+}
 
 #[derive(Deserialize)]
 pub struct RenderJobSpec {
@@ -204,7 +221,9 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
     let mut child = cmd.spawn().map_err(|e| format!("启动 Blender 失败: {e}"))?;
-    CHILD_PID.store(child.id(), Ordering::Relaxed);
+    if let Ok(mut reg) = REGISTRY.lock() {
+        reg.insert(job_id.clone(), child.id());
+    }
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -230,7 +249,7 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
     let mut last_emit = Instant::now();
     // 行接收循环：管道全部关闭后 rx 断开
     for line in rx.iter() {
-        if CANCEL.load(Ordering::Relaxed) {
+        if is_cancelled(&job_id) {
             break;
         }
         let (frame, mem, sample, sample_total) = parse_progress_line(&line);
@@ -264,18 +283,17 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
         }
     }
 
-    let cancelled = CANCEL.load(Ordering::Relaxed);
+    let cancelled = is_cancelled(&job_id);
     if cancelled {
-        let pid = CHILD_PID.load(Ordering::Relaxed);
-        if pid != 0 {
-            kill_tree(pid);
-        }
+        kill_tree(child.id());
         let _ = child.kill();
     }
     let status = child.wait().map_err(|e| format!("等待进程失败: {e}"))?;
     let _ = h1.join();
     let _ = h2.join();
-    CHILD_PID.store(0, Ordering::Relaxed);
+    if let Ok(mut reg) = REGISTRY.lock() {
+        reg.remove(&job_id);
+    }
 
     let code = status.code().unwrap_or(-1);
     Ok(RenderOutcome {
@@ -288,27 +306,60 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
     })
 }
 
-/// 执行单个渲染任务（前端按队列顺序逐个调用）
+/// 执行单个渲染任务（前端并发池按任务调用，支持多任务并行）
 #[tauri::command]
 pub async fn render_run(app: AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, String> {
-    if RUNNING.swap(true, Ordering::SeqCst) {
-        return Err("已有渲染任务在进行中".into());
+    let job_id = spec.id.clone();
+    {
+        // 先占位注册（pid=0），防止同一任务被重复启动；spawn 成功后由 do_render 写入真实 pid
+        let mut reg = REGISTRY.lock().map_err(|_| "任务注册表锁异常".to_string())?;
+        if reg.contains_key(&job_id) {
+            return Err("该任务已在渲染中".into());
+        }
+        reg.insert(job_id.clone(), 0);
     }
-    CANCEL.store(false, Ordering::SeqCst);
+    clear_cancel(&job_id);
     let result = tauri::async_runtime::spawn_blocking(move || do_render(&app, spec))
         .await
         .map_err(|e| format!("渲染线程异常: {e}"));
-    RUNNING.store(false, Ordering::SeqCst);
+    // 兜底清理：正常路径 do_render 已移除，异常路径（参数错误/启动失败等）这里移除占位
+    if let Ok(mut reg) = REGISTRY.lock() {
+        reg.remove(&job_id);
+    }
+    clear_cancel(&job_id);
     result?
 }
 
-/// 取消当前渲染（杀整棵进程树）
+/// 定向取消某个渲染任务（杀它的整棵进程树）
 #[tauri::command]
-pub fn render_cancel() {
-    CANCEL.store(true, Ordering::SeqCst);
-    let pid = CHILD_PID.load(Ordering::Relaxed);
-    if pid != 0 {
-        kill_tree(pid);
+pub fn render_cancel(job_id: String) {
+    if let Ok(mut s) = CANCELLED.lock() {
+        s.insert(job_id.clone());
+    }
+    let pid = REGISTRY.lock().ok().and_then(|reg| reg.get(&job_id).copied());
+    if let Some(pid) = pid {
+        if pid != 0 {
+            kill_tree(pid);
+        }
+    }
+}
+
+/// 取消全部正在运行的渲染任务
+#[tauri::command]
+pub fn render_cancel_all() {
+    let entries: Vec<(String, u32)> = REGISTRY
+        .lock()
+        .map(|reg| reg.iter().map(|(k, v)| (k.clone(), *v)).collect())
+        .unwrap_or_default();
+    if let Ok(mut s) = CANCELLED.lock() {
+        for (id, _) in &entries {
+            s.insert(id.clone());
+        }
+    }
+    for (_, pid) in entries {
+        if pid != 0 {
+            kill_tree(pid);
+        }
     }
 }
 
