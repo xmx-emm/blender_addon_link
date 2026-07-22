@@ -11,13 +11,33 @@ const ui = useUiStore();
 const showVersionMenu = ref(false);
 const newVersion = ref("");
 const detecting = ref(false);
+const refreshing = ref(false);
 const showUninstallWarn = ref(true);
+/** 卡片实例（expose 了 refresh） */
+const cardRefs = ref<Array<{ refresh: () => Promise<void> } | null>>([]);
 
 const versionRule = (v: string) => /^\d+\.\d+$/.test(v) || "格式如 4.2";
 
 interface AddonScan {
   path: string;
   is_extension: boolean;
+}
+
+async function refreshAll() {
+  if (store.addon_list.length === 0) {
+    ui.notify("列表是空的，没有可刷新的插件", "info");
+    return;
+  }
+  refreshing.value = true;
+  try {
+    const cards = cardRefs.value.filter((c): c is { refresh: () => Promise<void> } => !!c);
+    await Promise.all(cards.map((c) => c.refresh()));
+    ui.ok(`已刷新 ${cards.length} 个插件的链接状态`);
+  } catch (e) {
+    ui.error(`刷新失败：${e}`);
+  } finally {
+    refreshing.value = false;
+  }
 }
 
 async function pickAddonFolder() {
@@ -80,7 +100,17 @@ function addVersion() {
         <div class="page-subtitle">把开发目录链接到各版本 Blender 的插件目录，一份代码多版本调试</div>
       </div>
       <v-spacer/>
-      <v-btn color="primary" variant="flat" prepend-icon="mdi-folder-plus-outline" @click="pickAddonFolder">
+      <v-btn
+          variant="tonal"
+          prepend-icon="mdi-refresh"
+          :loading="refreshing"
+          :disabled="store.addon_list.length === 0"
+          title="重新检查各版本的链接状态"
+          @click="refreshAll"
+      >
+        刷新状态
+      </v-btn>
+      <v-btn color="primary" variant="flat" prepend-icon="mdi-folder-plus-outline" class="ml-2" @click="pickAddonFolder">
         添加插件
       </v-btn>
     </div>
@@ -145,7 +175,24 @@ function addVersion() {
 
     <!-- 插件列表 -->
     <template v-if="store.addon_list.length > 0">
-      <LinkAddonCard v-for="addon in store.addon_list" :key="addon.addon_path" :addon="addon"/>
+      <div class="d-flex align-center mb-2" style="gap: 4px">
+        <span class="dim text-caption">{{ store.addon_list.length }} 个插件</span>
+        <v-spacer/>
+        <v-btn size="small" variant="text" prepend-icon="mdi-unfold-less-horizontal"
+               @click="store.set_all_expand(false)">
+          全部折叠
+        </v-btn>
+        <v-btn size="small" variant="text" prepend-icon="mdi-unfold-more-horizontal"
+               @click="store.set_all_expand(true)">
+          全部展开
+        </v-btn>
+      </div>
+      <LinkAddonCard
+          v-for="addon in store.addon_list"
+          :key="addon.addon_path"
+          ref="cardRefs"
+          :addon="addon"
+      />
       <div class="d-flex justify-end mt-2">
         <v-btn size="small" variant="text" color="error" prepend-icon="mdi-playlist-remove"
                @click="store.clear_addon(); ui.ok('已清空插件列表')">

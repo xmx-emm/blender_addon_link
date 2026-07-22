@@ -26,6 +26,10 @@ pub fn run() {
             maintenance::scan_cleanup,
             maintenance::run_cleanup,
             maintenance::purge_orphans,
+            // WIP：前端尚未接线，先注册以免 dead_code
+            maintenance::migrate_config,
+            maintenance::check_blend_files,
+            maintenance::unpack_blend,
             detect::detect_config_versions,
             detect::detect_blender_executables,
             detect::probe_blender_exe,
@@ -37,6 +41,8 @@ pub fn run() {
             startup::startup_cancel,
             render::render_run,
             render::render_cancel,
+            // WIP：并行渲染前端尚未接线
+            render::render_cancel_all,
             render::schedule_shutdown,
             render::abort_shutdown
         ])

@@ -9,7 +9,11 @@ export interface AddonLinkItem {
     install_folder: string,
     is_exists: boolean,
     is_symbolic_link: boolean,
+    /** 链接目标是否等于当前插件源码路径 */
+    matches_source?: boolean,
     link_target?: string, // 链接指向的真实路径
+    /** 另一安装位置（addons ↔ extensions）是否也存在 */
+    dual_install?: boolean,
     supported: boolean,   // 该版本是否支持此插件形态
 }
 

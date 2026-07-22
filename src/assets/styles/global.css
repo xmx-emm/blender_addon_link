@@ -1,3 +1,11 @@
+html,
+body,
+#app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
 /* 隐藏主框滚动条 */
 body {
     -ms-overflow-style: none;
@@ -24,7 +32,8 @@ html::-webkit-scrollbar {
 
 /* 页面通用布局 */
 .page-wrap {
-    padding: 20px 24px 28px;
+    /* 顶部多留一点，避免标题贴齐滚动区上沿被裁切 */
+    padding: 24px 24px 28px;
     max-width: 1280px;
     margin: 0 auto;
 }
@@ -32,7 +41,10 @@ html::-webkit-scrollbar {
 .page-title {
     font-size: 1.35rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.4;
+    overflow: visible;
+    /* 避免 WebView2 下中文 ascender 被滚动容器顶部裁切 */
+    padding-block-start: 2px;
 }
 
 .page-subtitle {

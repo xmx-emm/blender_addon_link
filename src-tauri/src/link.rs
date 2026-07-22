@@ -205,16 +205,85 @@ pub fn scan_addon_paths(paths: Vec<String>) -> Vec<AddonScan> {
     out
 }
 
+/// 去掉 Windows 扩展路径前缀：`\\?\C:\...` / `\\?\UNC\server\share`
+pub fn strip_extended_prefix(s: &str) -> String {
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+/// 规范化路径字符串，便于跨前缀/大小写/分隔符比较（Windows 下大小写不敏感）
+pub fn normalize_path_str(s: &str) -> String {
+    let stripped = strip_extended_prefix(s);
+    let mut out = stripped.replace('/', "\\");
+    while out.len() > 3 && (out.ends_with('\\') || out.ends_with('/')) {
+        out.pop();
+    }
+    #[cfg(windows)]
+    {
+        out = out.to_ascii_lowercase();
+    }
+    out
+}
+
+/// 尽量解析为可比较的规范路径：优先 canonicalize，否则规范化字面量
+pub fn canonical_compare_key(path: &Path) -> String {
+    if let Ok(canon) = fs::canonicalize(path) {
+        return normalize_path_str(&canon.to_string_lossy());
+    }
+    normalize_path_str(&path.to_string_lossy())
+}
+
+/// 判断两个路径是否指向同一位置（解析 junction/symlink，处理 `\\?\` 与大小写）
+pub fn paths_equal(a: &Path, b: &Path) -> bool {
+    canonical_compare_key(a) == canonical_compare_key(b)
+}
+
+fn display_link_target(target: &Path) -> String {
+    strip_extended_prefix(&target.to_string_lossy())
+}
+
+/// 链接（junction/symlink）是否指向 expected_source
+fn link_matches_source(link_path: &Path, expected_source: &Path) -> bool {
+    // canonicalize 会解析 junction，两边都存在时最可靠
+    if let (Ok(a), Ok(b)) = (fs::canonicalize(link_path), fs::canonicalize(expected_source)) {
+        if normalize_path_str(&a.to_string_lossy()) == normalize_path_str(&b.to_string_lossy()) {
+            return true;
+        }
+    }
+    // 回退：read_link 目标与源路径字面量比较
+    let Ok(target) = fs::read_link(link_path) else {
+        return false;
+    };
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        link_path
+            .parent()
+            .unwrap_or(link_path)
+            .join(&target)
+    };
+    paths_equal(&resolved, expected_source)
+}
+
 /// 检查一批目标路径的存在与链接状态
 #[derive(serde::Serialize)]
 pub struct LinkStatus {
     pub exists: bool,
     pub is_link: bool,
+    /// 链接目标是否等于 expected_source（未提供源或非链接时为 false）
+    pub matches_source: bool,
     pub target: Option<String>,
 }
 
+/// `expected_source` 为本插件源码目录；用于判断链接是否指向「当前」插件而非仅「有链接」
 #[tauri::command]
-pub fn check_link_status(paths: Vec<String>) -> Vec<LinkStatus> {
+pub fn check_link_status(paths: Vec<String>, expected_source: String) -> Vec<LinkStatus> {
+    let source = Path::new(&expected_source);
     paths
         .into_iter()
         .map(|p| {
@@ -223,22 +292,24 @@ pub fn check_link_status(paths: Vec<String>) -> Vec<LinkStatus> {
                 Ok(meta) => {
                     let is_link = meta.file_type().is_symlink();
                     let target = if is_link {
-                        fs::read_link(path).ok().map(|t| {
-                            let s = t.to_string_lossy().to_string();
-                            s.strip_prefix(r"\\?\").map(|x| x.to_string()).unwrap_or(s)
-                        })
+                        fs::read_link(path)
+                            .ok()
+                            .map(|t| display_link_target(&t))
                     } else {
                         None
                     };
+                    let matches_source = is_link && link_matches_source(path, source);
                     LinkStatus {
                         exists: true,
                         is_link,
+                        matches_source,
                         target,
                     }
                 }
                 Err(_) => LinkStatus {
                     exists: false,
                     is_link: false,
+                    matches_source: false,
                     target: None,
                 },
             }
@@ -250,17 +321,16 @@ pub fn check_link_status(paths: Vec<String>) -> Vec<LinkStatus> {
 #[tauri::command]
 pub fn read_link_target(path: &str) -> Result<String, String> {
     fs::read_link(path)
-        .map(|p| {
-            let s = p.to_string_lossy().to_string();
-            // junction 目标常带 \\?\ 前缀，去掉便于阅读
-            s.strip_prefix(r"\\?\").map(|x| x.to_string()).unwrap_or(s)
-        })
+        .map(|p| display_link_target(&p))
         .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_bl_info, parse_manifest};
+    use super::{
+        normalize_path_str, parse_bl_info, parse_manifest, paths_equal, strip_extended_prefix,
+    };
+    use std::path::Path;
 
     #[test]
     fn manifest_meta() {
@@ -306,5 +376,91 @@ def register():
         let m = parse_bl_info(text);
         assert_eq!(m.name, "X");
         assert_eq!(m.blender_min, "4.2.0");
+    }
+
+    #[test]
+    fn strip_extended_prefix_drive() {
+        assert_eq!(
+            strip_extended_prefix(r"\\?\D:\plugins\my_addon"),
+            r"D:\plugins\my_addon"
+        );
+    }
+
+    #[test]
+    fn strip_extended_prefix_unc() {
+        assert_eq!(
+            strip_extended_prefix(r"\\?\UNC\server\share\addon"),
+            r"\\server\share\addon"
+        );
+    }
+
+    #[test]
+    fn normalize_ignores_prefix_case_slash_and_trailing() {
+        let a = normalize_path_str(r"\\?\D:\Plugins\MyAddon\");
+        let b = normalize_path_str(r"d:/plugins/myaddon");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn paths_equal_different_folders() {
+        // 字面量不同且均不存在时，不应误判为同一路径
+        assert!(!paths_equal(
+            Path::new(r"D:\plugins\folder_a"),
+            Path::new(r"D:\plugins\folder_b")
+        ));
+        assert!(paths_equal(
+            Path::new(r"\\?\D:\plugins\folder_a\"),
+            Path::new(r"d:/plugins/folder_a")
+        ));
+    }
+
+    #[test]
+    fn dual_install_detection() {
+        let dual = |primary: bool, alternate: bool| primary && alternate;
+        assert!(!dual(false, false));
+        assert!(!dual(true, false));
+        assert!(!dual(false, true));
+        assert!(dual(true, true));
+    }
+
+    #[test]
+    fn check_link_status_matches_only_same_source() {
+        use super::{check_link_status, link_dir, unlink_dir};
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("blender_link_status_{stamp}"));
+        let src_a = root.join("plugin_a");
+        let src_b = root.join("plugin_b");
+        let install = root.join("blender_addons").join("my_addon");
+        fs::create_dir_all(&src_a).unwrap();
+        fs::create_dir_all(&src_b).unwrap();
+        fs::create_dir_all(install.parent().unwrap()).unwrap();
+
+        let a = src_a.to_string_lossy().to_string();
+        let b = src_b.to_string_lossy().to_string();
+        let dst = install.to_string_lossy().to_string();
+        link_dir(&a, &dst).expect("create junction to A");
+
+        let for_a = check_link_status(vec![dst.clone()], a.clone());
+        assert_eq!(for_a.len(), 1);
+        assert!(for_a[0].exists);
+        assert!(for_a[0].is_link);
+        assert!(for_a[0].matches_source, "link to A should match plugin A");
+
+        let for_b = check_link_status(vec![dst.clone()], b);
+        assert!(for_b[0].exists);
+        assert!(for_b[0].is_link);
+        assert!(
+            !for_b[0].matches_source,
+            "link to A must NOT match plugin B"
+        );
+
+        unlink_dir(&dst).unwrap();
+        let _ = fs::remove_dir_all(&root);
     }
 }

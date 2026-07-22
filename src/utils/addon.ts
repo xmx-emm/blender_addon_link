@@ -41,6 +41,28 @@ export async function getAddonLinkFolder(version: string, is_extension: boolean)
     return await join(base, "scripts", "addons");
 }
 
+/**
+ * 主安装路径 +（4.2+）另一形态路径，用于双重安装检测。
+ * primary 按插件形态；alternate 为另一位置（addons ↔ extensions）。
+ */
+export async function getAddonInstallLocations(
+    version: string,
+    addonName: string,
+    is_extension: boolean,
+): Promise<{primary: string; alternate: string | null}> {
+    const primaryFolder = await getAddonLinkFolder(version, is_extension);
+    const primary = await join(primaryFolder, addonName);
+    if (!addonIsExtension(version)) {
+        return {primary, alternate: null};
+    }
+    const altFolder = await getAddonLinkFolder(version, !is_extension);
+    const alternate = await join(altFolder, addonName);
+    if (alternate.toLowerCase() === primary.toLowerCase()) {
+        return {primary, alternate: null};
+    }
+    return {primary, alternate};
+}
+
 export function formatBytes(n: number): string {
     if (!Number.isFinite(n) || n < 0) return "-";
     if (n < 1024) return `${n} B`;

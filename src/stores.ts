@@ -58,6 +58,11 @@ const useBlenderAddonStore = defineStore("blender_addon", {
         remove_addon(addon: AddonItem) {
             this.addon_list = this.addon_list.filter((v) => v.addon_path !== addon.addon_path);
         },
+        set_all_expand(expand: boolean) {
+            for (const a of this.addon_list) {
+                a.is_expand = expand;
+            }
+        },
         set_exe(version: string, path: string) {
             if (path) {
                 this.exe_map[version] = path;

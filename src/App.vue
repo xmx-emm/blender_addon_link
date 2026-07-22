@@ -3,11 +3,15 @@ import {computed, onMounted, onUnmounted} from "vue";
 import {listen, UnlistenFn} from "@tauri-apps/api/event";
 import {invoke} from "@tauri-apps/api/core";
 import useBlenderAddonStore, {useRenderStore, useUiStore} from "@/stores.ts";
+import AppTopBar from "@/components/AppTopBar.vue";
 import PageLink from "@/pages/PageLink.vue";
 import PageStartup from "@/pages/PageStartup.vue";
 import PageBlend from "@/pages/PageBlend.vue";
 import PageRender from "@/pages/PageRender.vue";
 import PageSettings from "@/pages/PageSettings.vue";
+import {disableRightClick} from "@/utils/event.ts";
+
+disableRightClick();
 
 const ui = useUiStore();
 const store = useBlenderAddonStore();
@@ -20,6 +24,10 @@ const pages = [
   {id: 'render', title: '渲染队列', icon: 'mdi-movie-open-play-outline'},
   {id: 'settings', title: '设置', icon: 'mdi-cog-outline'},
 ];
+
+const currentPageTitle = computed(() =>
+  pages.find(p => p.id === ui.page)?.title ?? '',
+);
 
 const currentPage = computed(() => {
   switch (ui.page) {
@@ -86,40 +94,46 @@ onUnmounted(() => unlisteners.forEach(u => u()));
 </script>
 
 <template>
-  <v-app class="not_select">
-    <v-navigation-drawer permanent rail rail-width="76" class="nav-rail">
-      <div class="d-flex flex-column align-center pt-3 pb-1">
-        <v-avatar color="primary" size="38" rounded="lg">
-          <v-icon icon="mdi-blender-software" size="24"/>
-        </v-avatar>
-      </div>
-      <v-list density="compact" nav class="px-1">
-        <v-list-item
-            v-for="p in pages"
-            :key="p.id"
-            :active="ui.page === p.id"
-            @click="ui.page = p.id"
-            class="nav-item"
-            rounded="lg"
-        >
-          <div class="d-flex flex-column align-center py-1">
-            <v-badge
-                v-if="p.id === 'render' && render.queue_running"
-                dot color="primary" offset-x="-2" offset-y="2"
-            >
-              <v-icon :icon="p.icon" size="22"/>
-            </v-badge>
-            <v-icon v-else :icon="p.icon" size="22"/>
-            <span class="nav-label">{{ p.title }}</span>
+  <v-app class="not_select app-root">
+    <!-- 顶栏在 v-main 外：占文档流 32px，避免 Vuetify layout 固定定位叠内容 -->
+    <AppTopBar :title="currentPageTitle"/>
+    <v-main class="app-shell">
+      <div class="app-body">
+        <nav class="nav-rail">
+          <div class="d-flex flex-column align-center pt-3 pb-1">
+            <v-avatar color="primary" size="38" rounded="lg">
+              <v-icon icon="mdi-blender-software" size="24"/>
+            </v-avatar>
           </div>
-        </v-list-item>
-      </v-list>
-    </v-navigation-drawer>
+          <v-list density="compact" nav class="px-1" bg-color="transparent">
+            <v-list-item
+                v-for="p in pages"
+                :key="p.id"
+                :active="ui.page === p.id"
+                @click="ui.page = p.id"
+                class="nav-item"
+                rounded="lg"
+            >
+              <div class="d-flex flex-column align-center py-1">
+                <v-badge
+                    v-if="p.id === 'render' && render.queue_running"
+                    dot color="primary" offset-x="-2" offset-y="2"
+                >
+                  <v-icon :icon="p.icon" size="22"/>
+                </v-badge>
+                <v-icon v-else :icon="p.icon" size="22"/>
+                <span class="nav-label">{{ p.title }}</span>
+              </div>
+            </v-list-item>
+          </v-list>
+        </nav>
 
-    <v-main class="main-bg">
-      <keep-alive>
-        <component :is="currentPage"/>
-      </keep-alive>
+        <main class="main-bg">
+          <keep-alive>
+            <component :is="currentPage"/>
+          </keep-alive>
+        </main>
+      </div>
     </v-main>
 
     <!-- 拖拽遮罩 -->
@@ -145,8 +159,60 @@ onUnmounted(() => unlisteners.forEach(u => u()));
 </template>
 
 <style scoped>
+/* 自定义顶栏不走 Vuetify layout 占位，避免 phantom padding / 与内容重叠 */
+.app-root {
+  --app-title-bar-height: 32px;
+  --v-layout-top: 0px;
+  --v-layout-left: 0px;
+  --v-layout-right: 0px;
+  --v-layout-bottom: 0px;
+}
+
+.app-root :deep(.v-application__wrap) {
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 顶栏占满剩余高度之下；去掉 v-main 默认 layout padding */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto !important;
+  max-height: none;
+  overflow: hidden;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: rgb(var(--v-theme-background));
+}
+
+.app-shell :deep(.v-main__wrap) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .nav-rail {
+  width: 76px;
+  flex: 0 0 76px;
   border-right: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgb(var(--v-theme-surface));
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -161,8 +227,11 @@ onUnmounted(() => unlisteners.forEach(u => u()));
 }
 
 .main-bg {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   background: rgb(var(--v-theme-background));
-  height: 100vh;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
