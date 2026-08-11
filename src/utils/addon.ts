@@ -21,7 +21,7 @@ export function addonIsExtension(version: string): boolean {
     return versionGte(version, 4, 2);
 }
 
-/** Blender 用户目录根：C:\Users\<name>\AppData\Roaming\Blender Foundation\Blender\<版本> */
+/** Blender 用户目录根：%APPDATA%\Blender Foundation\Blender\<版本> */
 export async function getBlenderVersionFolder(version: string): Promise<string> {
     return await join(
         await dirname(await dirname(await appDataDir())),

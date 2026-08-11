@@ -5,9 +5,11 @@ import {open} from "@tauri-apps/plugin-dialog";
 import useBlenderAddonStore, {useUiStore} from "@/stores.ts";
 import {BlenderExe, CleanupResult, CleanupTarget} from "@/data.ts";
 import {formatBytes, getBlenderVersionFolder} from "@/utils/addon.ts";
+import packageMeta from "../../package.json";
 
 const store = useBlenderAddonStore();
 const ui = useUiStore();
+const appVersion = packageMeta.version;
 const detecting = ref(false);
 const launching = ref<string | null>(null);
 
@@ -214,7 +216,7 @@ async function openConfigDir(version: string) {
       <v-card-text class="dim text-body-2">
         <div class="d-flex align-center mb-1" style="gap: 8px">
           <v-icon icon="mdi-blender-software" color="primary" size="18"/>
-          <span class="font-weight-bold" style="color: rgba(255,255,255,.85)">Blender Link 工具箱 v1.0.0</span>
+          <span class="font-weight-bold" style="color: rgba(255,255,255,.85)">Blender Link 工具箱 v{{ appVersion }}</span>
         </div>
         插件多版本链接 · 启动时间分析 · .blend 文件体积分析 · 渲染队列。
         链接使用 NTFS junction，不需要管理员权限；断开链接只删除链接本身，不会动你的源码目录。

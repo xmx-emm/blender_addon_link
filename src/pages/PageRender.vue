@@ -484,7 +484,7 @@ onUnmounted(() => unlisteners.forEach(u => u()));
             </v-col>
             <v-col cols="6">
               <v-text-field v-model="dlgOutput" label="输出路径覆盖（可选）" density="compact"
-                            placeholder="如 D:\render\out_####"
+                            placeholder="如 //render/out_####"
                             hint="#### 为帧号占位；4.5+ 还支持 {blend_name} 等模板" persistent-hint/>
             </v-col>
           </v-row>

@@ -159,6 +159,13 @@ async function refresh() {
 }
 
 async function doLink(row: Row) {
+  // Do not create a second installation when the alternate 4.2+ location is occupied.
+  if (!row.supported || row.exists || row.alt_exists) {
+    if (row.alt_exists && !row.exists) {
+      ui.notify(`Blender ${row.version} 的另一插件位置已有安装，未创建双重安装`, "warning");
+    }
+    return;
+  }
   row.busy = true;
   try {
     await invoke("link_dir", {from: props.addon.addon_path, to: row.install_path});
@@ -207,10 +214,16 @@ async function doReplace() {
 }
 
 async function linkAll() {
+  let skipped = 0;
   for (const row of rows.value) {
-    if (row.supported && !row.exists) {
+    if (row.supported && !row.exists && !row.alt_exists) {
       await doLink(row);
+    } else if (row.supported && !row.exists && row.alt_exists) {
+      skipped++;
     }
+  }
+  if (skipped > 0) {
+    ui.notify(`${skipped} 个版本的另一插件位置已有安装，已跳过以避免双重安装`, "warning");
   }
 }
 
@@ -447,7 +460,7 @@ defineExpose({refresh});
                      title="打开主安装位置" @click="openFolder(r.install_path)"/>
               <v-btn v-if="r.alt_exists && r.alt_path" icon="mdi-folder-multiple-outline" size="x-small" variant="text"
                      title="打开另一安装位置" @click="openFolder(r.alt_path)"/>
-              <v-btn v-if="!r.exists && r.supported" size="x-small" variant="tonal" color="primary"
+              <v-btn v-if="!r.exists && !r.alt_exists && r.supported" size="x-small" variant="tonal" color="primary"
                      :loading="r.busy" @click="doLink(r)">链接
               </v-btn>
               <v-btn v-else-if="canUnlink(r) && !r.dual_install && !needsReplace(r)" size="x-small" variant="tonal"

@@ -215,6 +215,17 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
     let start = Instant::now();
     let _awake = KeepAwake::new();
 
+    if is_cancelled(&job_id) {
+        return Ok(RenderOutcome {
+            code: -1,
+            success: false,
+            cancelled: true,
+            saved_count: 0,
+            seconds: start.elapsed().as_secs_f64(),
+            tail: vec![],
+        });
+    }
+
     let mut cmd = hidden_command(&spec.exe);
     cmd.args(&args)
         .stdout(Stdio::piped())
@@ -223,6 +234,30 @@ fn do_render(app: &AppHandle, spec: RenderJobSpec) -> Result<RenderOutcome, Stri
     let mut child = cmd.spawn().map_err(|e| format!("启动 Blender 失败: {e}"))?;
     if let Ok(mut reg) = REGISTRY.lock() {
         reg.insert(job_id.clone(), child.id());
+    }
+
+    // A cancel request may arrive after the reservation but before Blender has
+    // started emitting output. Handle it immediately so a silent process does
+    // not run until completion while the render loop waits on its pipes.
+    if is_cancelled(&job_id) {
+        kill_tree(child.id());
+        let _ = child.kill();
+        let code = child
+            .wait()
+            .ok()
+            .and_then(|status| status.code())
+            .unwrap_or(-1);
+        if let Ok(mut reg) = REGISTRY.lock() {
+            reg.remove(&job_id);
+        }
+        return Ok(RenderOutcome {
+            code,
+            success: false,
+            cancelled: true,
+            saved_count: 0,
+            seconds: start.elapsed().as_secs_f64(),
+            tail: vec![],
+        });
     }
 
     let stdout = child.stdout.take().unwrap();
@@ -318,7 +353,6 @@ pub async fn render_run(app: AppHandle, spec: RenderJobSpec) -> Result<RenderOut
         }
         reg.insert(job_id.clone(), 0);
     }
-    clear_cancel(&job_id);
     let result = tauri::async_runtime::spawn_blocking(move || do_render(&app, spec))
         .await
         .map_err(|e| format!("渲染线程异常: {e}"));

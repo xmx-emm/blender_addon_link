@@ -209,8 +209,10 @@ export const useRenderStore = defineStore("render_queue", {
             this.stop_requested = true;
         },
         async cancel_current() {
+            const jobId = this.active_job_id;
+            if (!jobId) return;
             try {
-                await invoke('render_cancel');
+                await invoke('render_cancel', {jobId});
             } catch (e) {
                 useUiStore().error(String(e));
             }
@@ -259,6 +261,9 @@ export const useRenderStore = defineStore("render_queue", {
         reset_job(id: string) {
             const j = this.jobs.find(x => x.id === id);
             if (j && j.status !== 'running') {
+                // Each execution gets a fresh ID so a late cancel response from
+                // an earlier run cannot cancel a retry of the same queue item.
+                j.id = crypto.randomUUID();
                 j.status = 'pending';
                 j.current_frame = null;
                 j.sample = null;
@@ -276,9 +281,41 @@ export const useRenderStore = defineStore("render_queue", {
         },
         // 应用重启后，把中断的"渲染中"任务恢复为等待
         recover() {
+            // Keep tasks saved by older releases runnable after the job schema gained fields.
+            if (!Array.isArray(this.jobs)) {
+                this.jobs = [];
+            }
             this.queue_running = false;
             this.active_job_id = '';
             for (const j of this.jobs) {
+                j.id ||= crypto.randomUUID();
+                j.blend ||= '';
+                j.name ||= j.blend.split(/[\\/]/).pop() ?? j.blend;
+                j.version ||= '';
+                if (j.mode !== 'animation' && j.mode !== 'range' && j.mode !== 'frame') {
+                    j.mode = 'animation';
+                }
+                if (j.status !== 'pending' && j.status !== 'running' && j.status !== 'done'
+                    && j.status !== 'failed' && j.status !== 'cancelled') {
+                    j.status = 'pending';
+                }
+                j.frame_start ??= null;
+                j.frame_end ??= null;
+                j.frame ??= null;
+                j.scene ??= '';
+                j.engine ??= '';
+                j.output ??= '';
+                j.current_frame ??= null;
+                j.sample ??= null;
+                j.sample_total ??= null;
+                j.saved_count ??= 0;
+                j.seconds ??= 0;
+                j.error ??= '';
+                j.meta_start ??= null;
+                j.meta_end ??= null;
+                j.meta_scene ??= '';
+                j.thumb_data_url ??= null;
+                j.blender_version ??= '';
                 if (j.status === 'running') {
                     j.status = 'pending';
                 }

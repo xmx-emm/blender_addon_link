@@ -32,7 +32,7 @@ pub fn detect_config_versions() -> Result<Vec<String>, String> {
             }
         }
     }
-    found.sort_by(|a, b| version_key(a).cmp(&version_key(b)));
+    found.sort_by_key(|v| version_key(v));
     Ok(found)
 }
 
@@ -171,7 +171,7 @@ fn scan_steam(found: &mut BTreeMap<String, BlenderExe>) {
         let Ok(text) = std::fs::read_to_string(&vdf) else { continue };
         for line in text.lines() {
             let line = line.trim();
-            // 行形如: "path"		"D:\\SteamLibrary"
+            // 行形如: "path"		"<SteamLibrary>"
             if let Some(rest) = line.strip_prefix("\"path\"") {
                 let p = rest.trim().trim_matches('"').replace("\\\\", "\\");
                 if !p.is_empty() {

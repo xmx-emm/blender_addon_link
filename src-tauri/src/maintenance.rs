@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::procutil::{hidden_command, run_with_timeout};
@@ -29,6 +31,22 @@ fn dir_stats(path: &Path) -> (u64, u64) {
 fn appdata_blender_root() -> Option<PathBuf> {
     let appdata = std::env::var("APPDATA").ok()?;
     Some(Path::new(&appdata).join("Blender Foundation").join("Blender"))
+}
+
+/// Blender stores user configuration in `major.minor` directories. Keep
+/// command-provided components constrained to that shape before joining them
+/// to APPDATA-derived paths.
+fn is_version_component(value: &str) -> bool {
+    let mut parts = value.split('.');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(major), Some(minor), None) => {
+            !major.is_empty()
+                && !minor.is_empty()
+                && major.chars().all(|c| c.is_ascii_digit())
+                && minor.chars().all(|c| c.is_ascii_digit())
+        }
+        _ => false,
+    }
 }
 
 fn cache_dir() -> Option<PathBuf> {
@@ -175,6 +193,9 @@ pub async fn run_cleanup(ids: Vec<String>) -> Result<CleanupResult, String> {
         };
         for id in ids {
             if let Some(v) = id.strip_prefix("autosave:") {
+                if !is_version_component(v) {
+                    continue;
+                }
                 if let Some(root) = appdata_blender_root() {
                     let dir = root.join(v).join("autosave");
                     if dir.is_dir() {
@@ -220,16 +241,37 @@ fn check_exe_and_blend(exe: &str, path: &str) -> Result<(), String> {
 
 /// 把文件备份为 .bak（已存在则带时间戳），返回备份路径
 fn backup_file(path: &str) -> Result<PathBuf, String> {
-    let mut backup = PathBuf::from(format!("{path}.bak"));
-    if backup.exists() {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        backup = PathBuf::from(format!("{path}.{ts}.bak"));
+    let source = Path::new(path);
+    let mut source_file = File::open(source).map_err(|e| format!("备份失败: {e}"))?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+
+    // Reserve the destination with create_new so concurrent operations cannot
+    // overwrite an existing backup, even when they happen in one timestamp.
+    for attempt in 0..1000u32 {
+        let backup = if attempt == 0 {
+            PathBuf::from(format!("{path}.bak"))
+        } else {
+            PathBuf::from(format!("{path}.{stamp}-{attempt}.bak"))
+        };
+        let mut destination = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)
+        {
+            Ok(file) => file,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("备份失败: {e}")),
+        };
+        if let Err(e) = io::copy(&mut source_file, &mut destination) {
+            let _ = std::fs::remove_file(&backup);
+            return Err(format!("备份失败: {e}"));
+        }
+        return Ok(backup);
     }
-    std::fs::copy(Path::new(path), &backup).map_err(|e| format!("备份失败: {e}"))?;
-    Ok(backup)
+    Err("备份失败：无法生成唯一的备份文件名".into())
 }
 
 /// 从 Blender stdout 里取 marker 后面的内容
@@ -299,6 +341,9 @@ pub async fn migrate_config(from_version: String, to_version: String) -> Result<
     tauri::async_runtime::spawn_blocking(move || {
         if from_version == to_version {
             return Err("源版本与目标版本相同".into());
+        }
+        if !is_version_component(&from_version) || !is_version_component(&to_version) {
+            return Err("版本目录必须是 major.minor 格式".into());
         }
         let root = appdata_blender_root().ok_or("读取 APPDATA 环境变量失败")?;
         let (src_dir, dst_dir) = migrate_config_dirs(&root, &from_version, &to_version);
@@ -470,21 +515,50 @@ pub async fn unpack_blend(exe: String, path: String) -> Result<UnpackResult, Str
 
 #[cfg(test)]
 mod tests {
-    use super::{find_marker, migrate_config_dirs, CHECK_MARKER, PURGE_MARKER};
+    use super::{
+        backup_file, find_marker, is_version_component, migrate_config_dirs, CHECK_MARKER,
+        PURGE_MARKER,
+    };
+    use std::fs;
     use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn version_component_rejects_path_syntax() {
+        assert!(is_version_component("4.2"));
+        assert!(!is_version_component("4.2.0"));
+        assert!(!is_version_component(".."));
+        assert!(!is_version_component("4.2\\..\\other"));
+        assert!(!is_version_component("volume:other"));
+    }
+
+    #[test]
+    fn backup_file_never_overwrites_an_existing_backup() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("blender_link_backup_{stamp}"));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("scene.blend");
+        fs::write(&source, b"first").unwrap();
+
+        let first = backup_file(&source.to_string_lossy()).unwrap();
+        fs::write(&source, b"second").unwrap();
+        let second = backup_file(&source.to_string_lossy()).unwrap();
+
+        assert_ne!(first, second);
+        assert_eq!(fs::read(&first).unwrap(), b"first");
+        assert_eq!(fs::read(&second).unwrap(), b"second");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn migrate_dirs_derived_from_versions() {
-        let root = Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender");
-        let (src, dst) = migrate_config_dirs(root, "4.2", "5.2");
-        assert_eq!(
-            src,
-            Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender\4.2\config")
-        );
-        assert_eq!(
-            dst,
-            Path::new(r"C:\Users\me\AppData\Roaming\Blender Foundation\Blender\5.2\config")
-        );
+        let root = Path::new("fixtures").join("Blender");
+        let (src, dst) = migrate_config_dirs(&root, "4.2", "5.2");
+        assert_eq!(src, root.join("4.2").join("config"));
+        assert_eq!(dst, root.join("5.2").join("config"));
     }
 
     #[test]

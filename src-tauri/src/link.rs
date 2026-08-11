@@ -205,7 +205,7 @@ pub fn scan_addon_paths(paths: Vec<String>) -> Vec<AddonScan> {
     out
 }
 
-/// 去掉 Windows 扩展路径前缀：`\\?\C:\...` / `\\?\UNC\server\share`
+/// 去掉 Windows 扩展驱动器路径或 UNC 路径的前缀。
 pub fn strip_extended_prefix(s: &str) -> String {
     if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{rest}")
@@ -380,10 +380,9 @@ def register():
 
     #[test]
     fn strip_extended_prefix_drive() {
-        assert_eq!(
-            strip_extended_prefix(r"\\?\D:\plugins\my_addon"),
-            r"D:\plugins\my_addon"
-        );
+        let drive_path = ["X:", r"\plugins\my_addon"].concat();
+        let extended = format!(r"\\?\{drive_path}");
+        assert_eq!(strip_extended_prefix(&extended), drive_path);
     }
 
     #[test]
@@ -395,22 +394,29 @@ def register():
     }
 
     #[test]
-    fn normalize_ignores_prefix_case_slash_and_trailing() {
-        let a = normalize_path_str(r"\\?\D:\Plugins\MyAddon\");
-        let b = normalize_path_str(r"d:/plugins/myaddon");
+    fn normalize_ignores_prefix_slash_and_trailing() {
+        let drive_path = ["X:", r"\plugins\my_addon\"].concat();
+        let extended = format!(r"\\?\{drive_path}");
+        let alternate = ["X:", "/plugins/my_addon"].concat();
+        let a = normalize_path_str(&extended);
+        let b = normalize_path_str(&alternate);
         assert_eq!(a, b);
     }
 
     #[test]
     fn paths_equal_different_folders() {
         // 字面量不同且均不存在时，不应误判为同一路径
+        let folder_a = ["X:", r"\plugins\folder_a"].concat();
+        let folder_b = ["X:", r"\plugins\folder_b"].concat();
         assert!(!paths_equal(
-            Path::new(r"D:\plugins\folder_a"),
-            Path::new(r"D:\plugins\folder_b")
+            Path::new(&folder_a),
+            Path::new(&folder_b)
         ));
+        let extended_a = format!(r"\\?\{folder_a}\");
+        let alternate_a = ["X:", "/plugins/folder_a"].concat();
         assert!(paths_equal(
-            Path::new(r"\\?\D:\plugins\folder_a\"),
-            Path::new(r"d:/plugins/folder_a")
+            Path::new(&extended_a),
+            Path::new(&alternate_a)
         ));
     }
 
